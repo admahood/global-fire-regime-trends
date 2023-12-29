@@ -4,7 +4,6 @@
 
 # Session Data files
 .RData
-.RDataTmp
 
 # User-specific files
 .Ruserdata
@@ -39,11 +38,10 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
+data/too_big/*
+data/temp/*
+data/temp/temp.zip
+data/aus_files/*
 
-# translation temp files
-po/*~
-
-# RStudio Connect folder
-rsconnect/
+# data archive (terraclim)
+data/terraclim_summaries/archive
