@@ -102,9 +102,9 @@ fe_df <- bind_rows(fixed_effects) %>%
                            levels = c("total_ba", "n_fires", "peak_season",
                                       "season_length", "size", 
                                       "duration", "fsr", "mx_grw"), 
-                           labels = c("Total Burned Area", "N Fires", "Peak Season",
-                                      "Season Length", "Size", 
-                                      "Duration", "Mean Growth", "Max Growth")),
+                           labels = c("Total Burned Area", "Number of Fires", "Peak Season",
+                                      "Season Length", "Event Size", 
+                                      "Event Duration", "Mean Growth", "Max Growth")),
          variable = ifelse(variable == "mean_vpd_anom", variable,
                            paste0(variable, "_cover")))
 #Kyle's idea
@@ -197,7 +197,7 @@ fe_df |>
   scale_color_manual(values = c("transparent", "black")) +
   facet_wrap(~koppen, ncol=1, scales = "free_y") +
   geom_vline(xintercept = seq(1.5, 4.5, by =1), linewidth = 0.25) +
-  ylab("Standardized Estiamtes") +
+  ylab("Standardized Model Coefficients") +
   xlab("Annual Changes in Land Cover and VPD") +
   labs(fill = "Fire\nRegime\nComponent") +
   # scale_fill_manual(values = c("gold", "skyblue","darkgreen", "chocolate4")) +
@@ -208,6 +208,38 @@ fe_df |>
           "Statistically significant associations are outlined and opaque") +
   theme(panel.background = element_rect(fill = NA, color = "black"))
 ggsave("figures/model_coefficients_kr_fill_aridboreal.png", bg="white", height=4.5, width=7.5)
+
+
+fe_df |>
+  group_by(variable) |>
+  mutate(estimate = scale(estimate, center = F)) |>
+  ungroup() |>
+  mutate(Response = as.factor(response)) |>
+  filter(!Response %in% c("Peak Season", "Season Length", "Duration")) |>
+  mutate(variable = str_replace_all(variable,"_", " ") |>
+           str_to_title() |>
+           str_replace_all("Vpd", "VPD") |>
+           str_replace_all("Anom", "Anomaly") |>
+           str_remove_all("Mean") |>
+           str_remove_all("Cover"))|>
+  ggplot(aes(x=variable, y=estimate, fill = Response, alpha = sig, color = sig)) +
+  geom_col(position = position_dodge()) +
+  guides(alpha = "none", color = "none") +
+  scale_color_manual(values = c("transparent", "black")) +
+  facet_wrap(~koppen, ncol=1, scales = "free_y") +
+  geom_vline(xintercept = seq(1.5, 4.5, by =1), linewidth = 0.25) +
+  ylab("Standardized Model Coefficients") +
+  xlab("Annual Changes in Land Cover and VPD") +
+  labs(fill = "Fire\nRegime\nComponent") +
+  # scale_fill_manual(values = c("gold", "skyblue","darkgreen", "chocolate4")) +
+  scale_fill_brewer(palette = "Dark2") +
+  scale_alpha_manual(values = c(.25, 1)) +
+  theme_bw() +
+  ggtitle("Effect of Annual Changes in VPD and Land Cover on Fire Regimes",
+          "Statistically significant associations are outlined and opaque") +
+  theme(panel.background = element_rect(fill = NA, color = "black"))
+ggsave("figures/model_coefficients_kr_fill_all.png", bg="white", height=4.5, width=7.5)
+
 
 ggsave("figures/model_coefficients_kr_fill_as_var.png", bg="white", height=7.5, width=9)
 # 

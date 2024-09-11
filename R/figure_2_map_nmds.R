@@ -115,14 +115,15 @@ bc2 <- bi_class(res1, y=all_dur, x=all_fsr, style="quantile") |>
 
 bv <- gimme_bivariate_map(bc1, x = "More Events and Burned Area", y="Longer Seasons",
                     filename = "figures/bivc_tba_sl.png", 
-                    title = "Country-Level Attributes");bv
+                    title = "a. Country-Level Attributes");bv
 
 bv1 <- gimme_bivariate_map(bc2, y = "Longer Lasting", x="Larger and Faster Spreading",
                            filename = "figures/bivc_n_fsr.png", 
-                           title = "Event Attributes")
+                           title = "b. Individual Event Attributes")
 # multipanel ==============
 
-ggarrange(bv, bv1, nrow=2, ncol=1, labels = "auto", widths = c(2,1)) %>%
+ggarrange(bv, bv1, nrow=2, ncol=1,# labels = "auto", 
+          widths = c(2,1)) %>%
   ggsave(plot = ., filename = "figures/figure_1_multipanel_new.png", 
          bg="white",width=9, height=8.5)
 
@@ -173,10 +174,12 @@ cordf <- df |>
   mutate(name = str_remove_all(name, "all_") |>
            str_replace_all("mx_grw", "max growth") |>
            str_replace_all("_", " ") |>
-           str_replace_all("dur", "Duration") |>
+           str_replace_all("dur", "Event Duration") |>
            str_replace_all("fsr", "Mean Growth") |>
            str_to_title() |>
-           str_replace_all("Tba", "Burned Area")) |>
+           str_replace_all("Tba", "Burned Area") |>
+           str_replace_all("N Fires", "Number of Fires") |>
+           str_replace_all("Size", "Event Size")) |>
   pivot_wider() |>
   dplyr::select(-aoi, -koppen_mode) 
 cor_p <- ggcorrplot::cor_pmat(cordf)
@@ -188,7 +191,8 @@ counter <- 1
 for(i in 1:ncol(cordf)){
   for(j in 1:ncol(climdf)){
     c <- cor.test(cordf[,i] |> pull(), 
-                  climdf[,j]|> pull())
+                  climdf[,j]|> pull(),
+                  method = "pearson")
     resdf[counter, 1] <- names(cordf)[i]
     resdf[counter, 2] <- names(climdf)[j]
     resdf[counter, 3] <- c$estimate
@@ -200,8 +204,8 @@ for(i in 1:ncol(cordf)){
 cc <- resdf |> 
   filter(p<0.01) |>
   mutate(fire = as.factor(fire) |> 
-           fct_relevel("Burned Area", "N Fires", "Season Length", "Peak Season",
-                       "Duration", "Size", "Mean Growth", "Max Growth"),
+           fct_relevel("Burned Area", "Number of Fires", "Season Length", "Peak Season",
+                       "Event Duration", "Event Size", "Mean Growth", "Max Growth"),
          clim = str_replace_all(clim, "_", " ") |> 
            str_to_title() |>
            str_replace_all("Ppt", "PPT") |>
@@ -244,9 +248,9 @@ ggplot(aes(x=fire, y=clim, fill=Corr)) +
 ggsave(plot = cc, filename = "figures/climate_correlations.png", width = 5, height = 8, bg="white")
 
 # ggsave(filename = "figures/climate_correlations.png", width = 7, height = 8, bg="white")
-corc[abs(corc) < 0.3] <- NA
+# corc[abs(corc) < 0.3] <- NA
 
-ggcorrplot::ggcorrplot(corc, lab = T)
+# ggcorrplot::ggcorrplot(corc, lab = T)
 
 # df |>
 #   as_tibble(rownames = "aoi") |>

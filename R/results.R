@@ -48,7 +48,6 @@ res <- world_boundaries %>%
 
 res %>% filter(all_n_fires >1000) %>% nrow
 
-alpha_new <- (1-0.05)^116 # do a legit bonferroni dude
 
 # pyrodiversity <- res %>%
 #   st_set_geometry(NULL) %>%
@@ -263,7 +262,7 @@ trend_size <- ggplot(res) +
   coord_sf(crs = wcrs,ylim = c(-5500000,7200000)) +
   theme_minimal()+
   scale_fill_manual(values = cols, name="Trend in Annual Means ", na.value = "white")+
-  ggtitle("Fire Size")
+  ggtitle("Event Size")
 
 trend_size_l <- ggplot(res) +
   geom_sf(aes(fill = trend_log_size), lwd=0.1) +
@@ -284,7 +283,7 @@ trend_n <- ggplot(res) +
   coord_sf(crs = wcrs,ylim = c(-5500000,7200000)) +
   theme_minimal()+
   scale_fill_manual(values = cols, name="Trend in Annual Means ", na.value = "white")+
-  ggtitle("n Fires")
+  ggtitle("Number of Fires")
 
 trend_n_l <- ggplot(res) +
   geom_sf(aes(fill = trend_log_n_fires), lwd=0.1) +
@@ -497,35 +496,70 @@ ggsave(penv, filename = "figures/nmds_env.png", bg="white", width=10, height=10)
 
 # text_plots ===================
 
-pp11<- ggplot(res,aes(x=log(all_total_ba+1), y=log(all_size+1))) +
-  geom_smooth(method=lm, se=F) +
-  geom_text(aes(label = aoi, color = koppen_mode)) +
+pba_s<- ggplot(res |> filter(!is.na(koppen_mode)),aes(y=all_total_ba/area_Mkm2, x=all_size)) +
+  geom_point(aes(label = aoi, color = koppen_mode)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  ylab("Burned Area/Total Area (Mkm2)") +
+  xlab("Event Size (Km2)") +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone") +
   theme_classic()
-ggsave(pp11,filename = "figures/ba_size.png", bg="white", width=10, height=7)
+ggsave(pba_s,filename = "figures/ba_size.png", bg="white", width=10, height=7)
   
-pp11<- ggplot(res,aes(y=log(all_n_fires), x=log(all_total_ba/area_Mkm2))) +
-  geom_smooth(method=lm, se=F) +
-  geom_text(aes(label = aoi, color = koppen_mode)) +
+pba_n<- ggplot(res|> filter(!is.na(koppen_mode)),aes(x=all_n_fires, y=all_total_ba/area_Mkm2)) +
+  scale_x_log10() +
+  scale_y_log10() +
+  ylab("Burned Area/Total Area (Mkm2)") +
+  xlab("Number of Fires") +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone")+
+  geom_point(aes(label = aoi, color = koppen_mode)) +
   theme_classic()
-ggsave(pp11,filename = "figures/ba_n.png", bg="white", width=10, height=7)
+ggsave(pba_n,filename = "figures/ba_n.png", bg="white", width=10, height=7)
 
-pp11<- ggplot(res,aes(x=log(all_fsr),y=log(all_total_ba/area_Mkm2))) +
-  geom_smooth(method=lm, se=F) +
-  geom_text(aes(label = aoi, color = koppen_mode)) +
+pba_fsr<- ggplot(res|> filter(!is.na(koppen_mode)),aes(y=all_fsr, x=all_total_ba/area_Mkm2)) +
+  geom_point(aes(label = aoi, color = koppen_mode))  +
+  scale_x_log10() +
+  scale_y_log10()  +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone")+
+  ylab("Burned Area/Total Area (Mkm2)") +
+  xlab("Mean Growth Rate")+
   theme_classic()
-ggsave(pp11,filename = "figures/ba_fsr.png", bg="white", width=10, height=7)
+ggsave(pba_fsr,filename = "figures/ba_fsr.png", bg="white", width=10, height=7)
 
-pp11<- ggplot(res,aes(y=log(all_mx_grw),x=log(all_size))) +
-  geom_smooth(method=lm, se=F) +
-  geom_text(aes(label = aoi, color = koppen_mode)) +
+pmg_s<- ggplot(res|> filter(!is.na(koppen_mode)),aes(x=(all_mx_grw),y=(all_size)))  +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone") +
+  ylab("Fire Event Size") +
+  xlab("Max Growth Rate")+
+  geom_point(aes(label = aoi, color = koppen_mode)) +
   theme_classic()
-ggsave(pp11,filename = "figures/mxg_size.png", bg="white", width=10, height=7)
+ggsave(pmg_s,filename = "figures/mxg_size.png", bg="white", width=10, height=7)
 
-pp11<- ggplot(res,aes(y=log(all_fsr),x=log(all_mx_grw))) +
-  geom_smooth(method=lm, se=F) +
-  geom_text(aes(label = aoi, color = koppen_mode)) +
+pp11<- ggplot(res|> filter(!is.na(koppen_mode)),aes(y=(all_fsr),x=(all_mx_grw))) +
+  scale_x_log10() +
+  scale_y_log10()  +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone")+
+  ylab("Mean Growth Rate") +
+  xlab("Max Growth Rate")+
+  geom_point(aes(label = aoi, color = koppen_mode)) +
   theme_classic()
 ggsave(pp11,filename = "figures/fsr_mx_grw.png", bg="white", width=10, height=7)
+
+ppdur<- ggplot(res|> filter(!is.na(koppen_mode)),aes(y=(all_n_fires),x=(all_dur))) +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_discrete(name = "Koppen-Geiger Climate Zone") +
+  ylab("Number of Fires") +
+  xlab("Event Duration")+
+  geom_point(aes(label = aoi, color = koppen_mode)) +
+  theme_classic()
+ggsave(ppdur,filename = "figures/fsr_mx_grw.png", bg="white", width=10, height=7)
+
+
+ggarrange(pba_n, pba_s, pba_fsr, pp11, pmg_s, ppdur, common.legend = TRUE, 
+          ncol = 3, nrow = 2) |>
+  ggsave(filename = 'figures/multipanel_scatterplots.png', bg='white', width=10, height=7)
 
 res %>%
   dplyr::select(aoi, temperature_seasonality,koppen_mode, starts_with("all"), -all_fsr) %>%
