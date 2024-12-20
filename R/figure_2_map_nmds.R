@@ -115,11 +115,11 @@ bc2 <- bi_class(res1, y=all_dur, x=all_fsr, style="quantile") |>
 
 bv <- gimme_bivariate_map(bc1, x = "More Events and Burned Area", y="Longer Seasons",
                     filename = "figures/bivc_tba_sl.png", 
-                    title = "a. Country-Level Attributes");bv
+                    title = "a. Area-Based Attributes");bv
 
 bv1 <- gimme_bivariate_map(bc2, y = "Longer Lasting", x="Larger and Faster Spreading",
                            filename = "figures/bivc_n_fsr.png", 
-                           title = "b. Individual Event Attributes")
+                           title = "b. Event-Based Attributes")
 # multipanel ==============
 
 ggarrange(bv, bv1, nrow=2, ncol=1,# labels = "auto", 
