@@ -1,3 +1,8 @@
+
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17151970.svg)](https://doi.org/10.5281/zenodo.17151970)
+
+
 # global-fire-regime-trends
 looking at patterns in trends in global fire regimes by country
 
