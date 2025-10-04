@@ -1,0 +1,33 @@
+kg,name,positive,negative,ns,percent_positive,percent_negative
+Arid,Duration,12,19,40,17,27
+Arid,Mean Growth,16,23,32,23,32
+Arid,Max Growth,15,26,30,21,37
+Arid,N Fires,12,26,33,17,37
+Arid,Peak Season,12,12,47,17,17
+Arid,Season Length,28,11,31,40,16
+Arid,Size,15,27,29,21,38
+Arid,Burned Area,9,32,30,13,45
+Boreal,Duration,5,12,32,10,24
+Boreal,Mean Growth,6,13,30,12,27
+Boreal,Max Growth,8,11,30,16,22
+Boreal,N Fires,5,20,24,10,41
+Boreal,Peak Season,10,5,34,20,10
+Boreal,Season Length,6,6,37,12,12
+Boreal,Size,6,8,35,12,16
+Boreal,Burned Area,5,17,27,10,35
+Equatorial,Duration,13,17,38,19,25
+Equatorial,Mean Growth,10,32,26,15,47
+Equatorial,Max Growth,9,28,31,13,41
+Equatorial,N Fires,9,28,31,13,41
+Equatorial,Peak Season,15,18,35,22,26
+Equatorial,Season Length,15,16,37,22,24
+Equatorial,Size,14,28,26,21,41
+Equatorial,Burned Area,5,36,27,7,53
+Temperate,Duration,19,18,43,24,22
+Temperate,Mean Growth,17,22,41,21,28
+Temperate,Max Growth,15,24,41,19,30
+Temperate,N Fires,11,30,39,14,38
+Temperate,Peak Season,19,10,51,24,12
+Temperate,Season Length,22,10,48,28,12
+Temperate,Size,21,20,39,26,25
+Temperate,Burned Area,11,33,36,14,41

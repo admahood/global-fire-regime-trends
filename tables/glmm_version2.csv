@@ -1,0 +1,9 @@
+kg,term,cr2,mr2,re_exp
+Boreal,Duration,0.625,0.003,0.622
+Boreal,Max Growth,0.689,0.046,0.643
+Boreal,Mean Growth,0.763,0.091,0.672
+Boreal,Size,0.514,0.129,0.386
+Arid,Duration,0.603,0.012,0.591
+Arid,Max Growth,0.75,0.134,0.615
+Arid,Mean Growth,0.798,0.126,0.672
+Arid,Size,0.739,0.215,0.524
