@@ -6,11 +6,11 @@
 # Data and Code for: "The properties of individual fire events are essential for understanding global fire regimes"
 
 Code to reproduce the entire analysis is in the R folder. The manuscript is available as a preprint at __(DOI coming soon)__.
-We used fire perimeter products for every country and overlayed Koppen-Geiger climate classifications.
 
+![](figures/kg_map_inset.png)
 
+For this analysis, we used fire perimeter products for every country (Mahood *et al.* 2022). In order to avoid confounding factors associated with climatic differences in large countries, we overlayed Koppen-Geiger (KG) climate classifications and split each country by those climate classifications. The vast majority of countries were mostly in the same climate region.
 
-![Figure 1](figures/kg_map_inset.png)
 
 We calculated 8 attributes of fire regimes for each KG classification within each country. We characterized fire regime components as area-based or event-based. Area-based metrics may or may not require the deliniation of events (e.g. number of fires requires event delineation), but essentially do not require any knowledge of the inner workings of individual events. Event-based metrics require event-level attributes, spatial (size), temporal (duration), combinations of the two (growth rate). Other event-based metrics also exist, obviously, but were not studied here (e.g. intensity and severity).
 
@@ -28,7 +28,7 @@ Four were event-based
  - Mean growth (size/duration)
  - Duration
 
-Here are the spatial patterns:
+Here are the spatial patterns. We used a bivariate map to look at the spatial and temporal, event- and area-based components:
 
 ![Figure 2](figures/new_BV_kg_x_country.png)
 
