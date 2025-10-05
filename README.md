@@ -5,7 +5,7 @@
 
 # Data and Code for: "The properties of individual fire events are essential for understanding global fire regimes"
 
-Code to reproduce the entire analysis is in the R folder. Preprint is available at _______<DOI coming soon>__________
+Code to reproduce the entire analysis is in the R folder. Preprint is available at _______(DOI coming soon)__________
 
 We used fire perimeter products for every country and overlayed Koppen-Geiger climate classifications.
 
