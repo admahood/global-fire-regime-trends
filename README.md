@@ -13,7 +13,7 @@ We used fire perimeter products for every country and overlayed Koppen-Geiger cl
 
 ![Figure 1](figures/kg_map_inset.png)
 
-We calculated 8 attributes of fire regimes for each KG classification within each country. 
+We calculated 8 attributes of fire regimes for each KG classification within each country. We characterized fire regime components as area-based or event-based. Area-based metrics may or may not require the deliniation of events (e.g. number of fires requires event delineation), but essentially do not require any knowledge of the inner workings of individual events. Event-based metrics require event-level attributes, spatial (size), temporal (duration), combinations of the two (growth rate). Other event-based metrics also exist, obviously, but were not studied here (e.g. intensity and severity).
 
 Four were area-based: 
 
