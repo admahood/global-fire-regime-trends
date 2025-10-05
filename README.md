@@ -41,7 +41,7 @@ Here are the temporal trends:
 
 ![Figure 4](figures/fig3_kg_country_trends_all.png)
 
-Finally, we examined associations between interannual variability of the event-based components, landcover and VPD anomaly:
+Finally, we examined associations between interannual variability of the event-based components, landcover and VPD anomaly, for arid and boreal regions. We wanted to examine the general idea of energy versus fuel limitation for the event-based fire regime components:
 
 
 ![figure 5](figures/figure_5_barplots.png)
