@@ -1,0 +1,144 @@
+/**
+ * This code calculates RdNBR for FIRED events from MODIS Terra/Aqua spectral composites
+ * Summarizes burn severity by MODIS Landcover classifications and by country
+ * 
+ * Author: Maxwell Cook,
+ * Department of Geography, University of Colorado Boulder
+ * CIRES Earth Lab
+ * maxwell.cook@colorado.edu
+ * 
+ */
+
+Map.setOptions('hybrid');
+
+// Loop through fire events
+var severity = events.map(function(ftr){
+  // Calculate the region
+  var region = ftr.geometry().buffer(1000).convexHull();
+  
+  // Get the dates for pre-ignition
+  var igDate = ee.Date(ftr.get('ig_date'));
+  var preStart = igDate.advance(-32, 'days');
+  // Get the dates for post-fire
+  var postStart = ee.Date(ftr.get('last_date')).advance(7, 'days');
+  var postEnd = ee.Date(ftr.get('last_date')).advance(39, 'days');
+  
+  // Filter the MODIS Terra composites (Pre)
+  var filterPre = terra8day
+  .filterDate(preStart, igDate)
+  .filterBounds(region)
+  .median();
+  // Filter the MODIS Terra composites (Post)
+  var filterPost = terra8day
+  .filterDate(postStart, postEnd)
+  .filterBounds(region)
+  .median();
+  
+  // Calculate the NBR, dNBR
+  var nbrPre = filterPre
+    .normalizedDifference(['sur_refl_b02', 'sur_refl_b07']);
+  var nbrPost = filterPost
+    .normalizedDifference(['sur_refl_b02', 'sur_refl_b07']);
+  // dNBR
+  var dnbr = nbrPre.subtract(nbrPost).rename('dNBR');
+  
+  // Summarize dNBR within FIRED perimeter
+  var severityReduc = dnbr.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: ftr.geometry(),
+    scale: 500,
+    maxPixels: 1e13
+  });
+  
+  // Submit the output dictionary to a feature
+  var dict_to_ftr = ee.Feature(null, severityReduc); 
+  var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+  // Return the final merged table
+  return(output_ftr);
+  
+});
+
+// Export to Drive
+Export.table.toDrive({
+  collection: severity,
+  description: 'conus_burn_severity_summary',
+  folder: 'earth-lab',
+  fileFormat: 'CSV'
+});
+// add to the map
+Map.addLayer(severity, {}, "Burn Severity Average", false);
+
+//////////////////////////////////////////
+//////////////////////////////////////////
+
+// Test with the High Park Fire, CO (2012)
+var test = ee.Feature(events.filter(ee.Filter.eq('id', 82054)).first());
+print("High Park Fire: ", test);
+// Grab the dates
+var igDate = ee.Date(test.get('ig_date')).update({hour: 0}).advance(-2, 'days');
+var start = igDate.advance(-32, 'days');
+var lsDate = ee.Date(test.get('last_date')).update({hour: 0}).advance(2, 'days');
+var end = lsDate.advance(32, 'days');
+// print the pre-fire dates
+print("Pre-fire dates: ", igDate, start);
+// Filter the surface reflectance product for pre-fire image
+var filterPre = terra8day
+  .filterDate(start, igDate)
+  .filterBounds(test.geometry().convexHull())
+  .median();
+print("Pre-Fire MODIS Terra Composite", filterPre);
+// Visualize a true color
+Map.addLayer(filterPre, rgbVisPre, 'Pre-Fire True Color (143)');
+// Now, grab the post-fire image composite
+// print the post-fire dates
+print("Post-fire dates: ", lsDate, end);
+// Filter the surface reflectance product for pre-fire image
+var filterPost = terra8day
+  .filterDate(lsDate, end)
+  .filterBounds(test.geometry().convexHull())
+  .median();
+// Visualize a true color
+Map.addLayer(filterPost, rgbVisPost, 'Post-Fire True Color (143)');
+// Create the dNBR
+// Band 2 = NIR (841-876nm), 
+// Band 7 = SWIR (2105-2155nm)
+// pre NBR
+var nbrPre = filterPre
+.normalizedDifference(['sur_refl_b02', 'sur_refl_b07']);
+// post NBR
+var nbrPost = filterPost
+.normalizedDifference(['sur_refl_b02', 'sur_refl_b07']);
+// Calculate dNBR
+var dnbr = nbrPre.subtract(nbrPost);
+// Visualize
+Map.addLayer(dnbr, dnbrVis, "Delta Nornalized Burn Ratio");
+// Calculate some statistics for the perimeter
+// Average
+var meanDNBR = dnbr.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: test.geometry(),
+  scale: 500,
+  maxPixels: 1e13,
+  tileScale: 16
+});
+print("Mean dNBR for High Park Fire: ", meanDNBR.get('nd'));
+// Percentiles
+var percDNBR = dnbr.reduceRegion({
+  reducer: ee.Reducer.percentile([10,90]),
+  geometry: test.geometry(),
+  scale: 500,
+  maxPixels: 1e13,
+  tileScale: 16
+});
+print("10th Percentile dNBR: ", percDNBR.get('nd_p10'),
+      "90th Percentile dNBR", percDNBR.get('nd_p90'));
+// Add a convex hull outline
+var empty = ee.Image().byte();
+var paint = empty.paint({
+  featureCollection: test.geometry().convexHull(),
+  color: 1,
+  width: 2
+});
+Map.centerObject(test, 11)
+Map.addLayer(paint, {}, "Boundary");

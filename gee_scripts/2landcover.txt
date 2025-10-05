@@ -1,0 +1,143 @@
+/**
+ * Assessment of annual land cover types by world countries
+ * using MODIS land cover (MCD12Q1)
+ */
+
+var bolivia = countries.filter(ee.Filter.eq('country_na', 'Bolivia'));
+
+// Set options
+Map.setOptions('hybrid');
+
+// filter out Antarctica (crosses the pole)
+// leaving it in throws an error with reprojection
+lsib = lsib.filter("country_na != 'Antarctica'");
+Map.addLayer(lsib, null, "LSIB Country Boundaries");
+
+// Load and filter landcover product temporally
+var lc = mcd12q1
+  .filter(ee.Filter.calendarRange(2003,2021,'year'))
+  .select('LC_Type1');
+
+// Create a mask bands for each year
+var lc_ = lc.map( function (image) {
+  
+  // croplands
+  var crop = image.eq(12)
+    crop = crop
+      .updateMask(crop.eq(1))
+      .multiply(ee.Image.pixelArea()).divide(1e6)
+      .rename('cropland');
+  
+  // croplands and cropland mosaics
+  var crop_mosaic = image.remap([12,14], [1,1], 0);
+    crop_mosaic = crop_mosaic
+      .updateMask(crop_mosaic.eq(1))
+      .multiply(ee.Image.pixelArea()).divide(1e6)
+      .rename('cropland_mosaics');
+  
+  // forested
+  var forest = image.remap([1,2,3,4,5],[1,1,1,1,1], 0);
+    forest = forest
+      .updateMask(forest.eq(1))  
+      .multiply(ee.Image.pixelArea()).divide(1e6)
+      .rename('forest');
+  
+  // forest and savannas
+  var forest_sav = image.remap([1,2,3,4,5,8],[1,1,1,1,1,1], 0);
+    forest_sav = forest_sav
+      .updateMask(forest_sav.eq(1))
+      .multiply(ee.Image.pixelArea()).divide(1e6)
+      .rename('forest_savannas');
+    
+  // grassland
+  var grass = image.eq(10);
+    grass = grass
+    .updateMask(grass.eq(1))
+    .multiply(ee.Image.pixelArea()).divide(1e6)
+    .rename('grassland');
+    
+    
+  // Urban / built-up
+  var urban = image.eq(13);
+    urban = urban
+      .updateMask(urban.eq(1))
+      .multiply(ee.Image.pixelArea()).divide(1e6)
+      .rename('urban_built');
+      
+  // add as bands
+  return image
+    .addBands(crop)
+    .addBands(crop_mosaic)
+    .addBands(forest)
+    .addBands(forest_sav)
+    .addBands(grass)
+    .addBands(urban);
+    
+});
+
+// Check the metadata
+print(lc_,"MODIS MCD12Q1 (2003-2020)");
+
+//create function to calculate mean values for each polygon
+// return the feature with the date set as an attribute
+var lc_area = function(image) {
+  
+  image = image.select(
+    ['cropland', 'cropland_mosaics', 'forest',
+     'forest_savannas', 'grassland', 'urban_built']
+  );
+  
+  var area = image.reduceRegions({
+    collection: countries, 
+    reducer: ee.Reducer.sum(),
+    scale: 500,
+    tileScale: 16
+  });
+  
+  // assign time for every feature
+  area = area.map(function(f) { 
+    return f.set({date: image.date().format("YYYY-MM-dd")});
+  });
+  
+  return area.copyProperties(image);
+  
+};
+
+// Map the function
+var lc_area_ts = lc_.map(lc_area).flatten();
+
+// Export to Drive
+Export.table.toDrive({
+  collection: lc_area_ts,
+  description: "annual_landcover_area",
+  folder: "global-fire-report",
+  fileNamePrefix: "annual_landcover_area",
+  fileFormat: "CSV"
+});
+
+// // Export for just Bolivia with all 17 classes
+
+// var bolivia_lc = lc.map(function(img){
+//   var area = img.reduceRegions({
+//     collection: bolivia, 
+//     reducer: ee.Reducer.sum(),
+//     scale: 500,
+//     tileScale: 16
+//   });
+//   // assign time for every feature
+//   area = area.map(function(f) { 
+//     return f.set({date: img.date().format("YYYY-MM-dd")});
+//   });
+//   return area.copyProperties(img);
+// });
+
+// print(bolivia_lc);
+
+// // Export to Drive
+// Export.table.toDrive({
+//   collection: bolivia_lc,
+//   description: "bolivia_annual_landcover_area",
+//   folder: "global-fire-report",
+//   fileNamePrefix: "bolivia_annual_landcover_area",
+//   fileFormat: "CSV"
+// });

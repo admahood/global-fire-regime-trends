@@ -1,0 +1,146 @@
+/**
+ * Creation of 'global flammable lands' layer
+ * Based on reclassified MCD12Q1 Land Cover
+ * 
+ * Then, take the modal classification (2003-2020)
+ * 
+ */
+
+print(kg_countries.first().geometry().projection());
+
+// Grab the MCD12Q1 Type 1 Land Cover
+var lc = mcd12q1
+  .select('LC_Type1')
+  // Filter to temporal range (2003-2020)
+  .filter(ee.Filter.calendarRange(2003,2021,'year'));
+
+// grab the projection information
+var proj = lc.first().projection().getInfo();
+var transform = proj.transform, crs = proj.crs;
+print("MODIS Projection",crs," and Transform",transform);
+
+// grab a water mask
+var water = lc.mode().neq(17);
+
+// reclassify land cover
+// flammable lands mask
+var img = lc.map(function(image){
+  return image.remap(
+    [11, 13, 15, 16, 17], 
+    [0, 0, 0, 0, 0], 1) //remap, all others 1
+      .updateMask(water)
+      .rename('flammable')
+      .set('system:time_start', image.get('system:time_start'));
+});
+
+// Time-series reduce (percent area)
+var ts = img.map(function( image ){
+  
+  return image
+    .updateMask(image.eq(1))
+    .multiply(ee.Image.pixelArea()).divide(1e6).round()
+    .set('system:time_start', image.get('system:time_start'));
+    
+});
+
+
+// create function to calculate mean values for each polygon
+// return the feature with the date set as an attribute
+var get_area = function(image) {
+  
+  image = image.select('flammable').clip(kg_countries);
+  // reproject the image
+  image = image.reproject('EPSG:4326', null, 500);
+  
+  var area = image.reduceRegions({
+    collection: kg_countries, 
+    reducer: ee.Reducer.sum(),
+    scale: 500,
+    crs:'EPSG:4326',
+    tileScale: 16
+  });
+  
+  // assign time for every feature
+  area = area.map(function(f) { 
+    return f.set({date: image.date().format("YYYY-MM-dd")});
+  });
+  
+  return area.copyProperties(image);
+  
+};
+
+// Map the function
+var flam_area_ts = ts.map(get_area).flatten();
+
+// Drop the geometry
+var flam_area_ts = flam_area_ts.map(function(f) {
+  return f.setGeometry(null);
+});
+print(flam_area_ts.limit(10)); // check the result
+
+// Export to Drive
+Export.table.toDrive({
+  collection: flam_area_ts,
+  description: "annual_flammable_area",
+  folder: "global-fire-report",
+  fileNamePrefix: "annual_flammable_area",
+  fileFormat: "CSV"
+});
+
+
+// // modal pixel value
+// var mode = img
+//   .reduce(ee.Reducer.mode())
+//   .rename('flammable')
+//   .setDefaultProjection(crs)
+//   .reduceResolution({
+//     reducer: ee.Reducer.mode(),
+//     bestEffort: true
+//   });
+
+// // Export
+// Export.image.toAsset({
+//   image: img, region: countries,
+//   description: 'MCD12Q1_GLOBAL_FLAMMABLE_LANDS',
+//   crs: crs, crsTransform: transform,
+//   scale: 500, maxPixels: 1e13
+// });
+
+
+// // stack them as bands
+// var stack_ts = ts.toBands();
+// print(stack.bandNames());
+
+// // Loop through countries, export
+// var reduc = countries.map(function(ftr){
+  
+//   // reduce
+//   var area = stack_ts.reduceRegion({
+//     reducer: ee.Reducer.sum(),
+//     geometry: ftr.geometry(),
+//     scale: 500,
+//     crs: crs,
+//     maxPixels: 1e13,
+//     tileScale: 16,
+//     bestEffort: true
+//   });
+  
+//   // Submit the output dictionary to a feature
+//   var dict_to_ftr = ee.Feature(null, area); 
+//   var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+//   // Return the final merged table
+//   return(output_ftr);
+  
+// });
+
+// // check it
+// Map.addLayer(reduc, null, "Area Reduction", false);
+
+// // export
+// Export.table.toDrive({
+//   collection: reduc,
+//   description: 'annual_flammable_area',
+//   folder: 'global-fire-report',
+//   fileFormat: 'CSV'
+// });

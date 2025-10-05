@@ -1,0 +1,79 @@
+/** Extract population estimates by country
+ * using gridded population of the world
+ */
+
+print(worldpop.limit(10));
+
+var years = ee.List.sequence(2003,2020,1);
+
+// create annual mosaics
+var mosaics = ee.ImageCollection.fromImages(years.map( function(yr) {
+  var subset = worldpop.filter(ee.Filter.eq('year', yr));
+  return subset.mosaic()
+    .set('year', yr)
+    .set('system:index', ee.String(ee.Number(yr).short()));
+}));
+
+// create function to calculate mean values for each polygon
+// return the feature with the date set as an attribute
+var pop_count = function(image) {
+  
+  image = image.select('population');
+  
+  var count = image.reduceRegions({
+    collection: countries, 
+    reducer: ee.Reducer.sum(),
+    scale: 1000,
+    tileScale: 16
+  });
+  
+  // assign time for every feature
+  count = count.map(function(f) { 
+    return f.set({year: image.get('year')});
+  });
+  
+  return count.copyProperties(image);
+  
+};
+
+// Map the function
+var pop_count_ts = mosaics.map(pop_count).flatten();
+
+// Export to Drive
+Export.table.toDrive({
+  collection: pop_count_ts,
+  description: "annual_population_count",
+  folder: "global-fire-report",
+  fileNamePrefix: "annual_population_count",
+  fileFormat: "CSV"
+});
+
+
+
+
+
+// // stack them as bands
+// var stack_ts = mosaics.toBands();
+
+// // Loop through countries, export
+// var pop_reduc = countries.map(function(ftr){
+  
+//   // reduce
+//   var count = stack_ts.reduceRegion({
+//     reducer: ee.Reducer.sum(),
+//     geometry: ftr.geometry(),
+//     scale: 100,
+//     maxPixels: 1e13,
+//     tileScale: 16,
+//     bestEffort: true
+//   });
+  
+//   // Submit the output dictionary to a feature
+//   var dict_to_ftr = ee.Feature(null, count); 
+//   var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+//   // Return the final merged table
+//   return(output_ftr);
+  
+// });
+

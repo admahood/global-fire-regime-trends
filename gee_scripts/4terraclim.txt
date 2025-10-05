@@ -1,0 +1,383 @@
+/**
+ * Summaries of TerraClim VPD by country.
+ * 
+ * We summarize Vapor Pressure Deficit (VPD) within 'flammable lands'
+ *  at both the annual time step and for the peak burn season of each country
+ *
+ * Data Sources:
+ * - TerraClimate (Abatzaglou et al. 2018)
+ * - MCD12Q1 (MODIS Land Cover, Type 1)
+ * 
+ * Author:
+ * Maxwell C. Cook, PhD Student
+ * Department of Geography,
+ * University of Colorado Boulder
+ * maxwell.cook@colorado.edu
+ * 
+ */
+
+Map.setOptions('hybrid');
+
+// grab a water mask
+var water = mcd12q1.select('LC_Type1').mode().neq(17);
+
+// Create the flammable area mask
+// Grab the MCD12Q1 Type 1 Land Cover
+var flammable = mcd12q1
+  .select('LC_Type1')
+  // Filter to temporal range (2003-2020)
+  .filter(ee.Filter.calendarRange(2003,2021,'year'))
+  .map(function(image){
+    return image.remap(
+      [11, 13, 15, 16, 17], 
+      [0, 0, 0, 0, 0], 1) //remap, all others 1
+        .updateMask(water)
+        .rename('flammable')
+        .set(
+          'system:time_start', 
+          image.get('system:time_start'));
+  }).reduce(ee.Reducer.mode())
+    .rename('flammable');
+
+// print("TerraClim ImageCollection: ", terraclim);
+
+// Band names
+var bands = terraclim.first().bandNames();
+// print("TerraClim Bands: ", bands);
+
+// Grab the res, crs
+var proj = terraclim.first().select('vpd').projection();
+var res = proj.nominalScale();
+
+// mask the terraclim
+// select just the VPD band
+// mask to flammable lands
+// be sure to reset the system:time_start
+terraclim = terraclim.map(function(image){
+  return image
+            .select('vpd')
+            .updateMask(flammable.eq(1))
+            .set('system:time_start', image.get('system:time_start'));
+});
+
+// // check it worked
+// Map.addLayer(
+//   terraclim
+//     .filter(ee.Filter.calendarRange(2010,2020,'year'))
+//     .filter(ee.Filter.calendarRange(5,9,'month'))
+//     .mean().clip(countries.filter(ee.Filter.eq('aoi', 'conus_ak'))),
+//   vpdVis, "TerraClim Mean VPD (May-Sept 2010-2020)", false);
+
+
+/**
+* Calculate the annual and monthly statistics
+* Mean, min, max, stdev, anomoly
+*/
+
+// Grab the 'global' pixel mean 
+// - i.e., the long-term mean
+var ltmean = terraclim.mean().rename('vpd_lt_mean');
+var ltstdev = terraclim
+                    .reduce(ee.Reducer.stdDev())
+                    .rename('vpd_lt_stdev');
+var lt = ltmean.addBands(ltstdev);
+
+// // export the long-term mean 
+// // standard deviation by country
+// var ltreduc = lt.reduceRegions({
+//     reducer: ee.Reducer.mean(),
+//     collection: countries,
+//     scale: res,
+//     tileScale: 16
+// });
+
+// // Export the table
+// Export.table.toDrive({
+//   collection: ltreduc.select(['aoi', 'vpd_lt_mean', 'vpd_lt_stdev']),
+//   description: 'long-term_vpd',
+//   folder: 'global-fire-report',
+//   fileFormat: 'CSV'
+// });
+
+
+/**
+ * Work with monthly mean and anomoly + annual summaries
+ * Including slicing to peak burn season months
+ */
+
+// subset to analysis time period
+var imgc = terraclim
+  .filter(ee.Filter.calendarRange(2003, 2021, 'year'));
+
+
+// add the VPD anomoly as a band
+// monthly pixel value - long-term monthly mean
+imgc = imgc.map( function( image ) {
+  
+  // get the month of the image
+  var m = ee.Number.parse(
+    ee.Date(image.get('system:time_start')).format('MM')
+  );
+  
+  // calculate the long-term monthly mean
+  var ltmmean = terraclim
+    .filter(ee.Filter.calendarRange(m,m,'month'))
+    .mean();
+  
+  // calculate the anomoly
+  var anom = image.subtract(ltmmean).toInt16().rename('vpd_anom');
+  
+  return image.addBands(anom)
+              .set('system:time_start', image.get('system:time_start'));
+              
+});
+
+// print(imgc.first().bandNames(), imgc);
+
+// list of years
+var years = ee.List.sequence(2003,2020,1);
+var months = ee.List.sequence(1,12,1);
+
+// Calculate annual statistics
+var stat = ee.Reducer.mean();
+// var stat = ee.Reducer.min();
+// var stat = ee.Reducer.max();
+// var stat = ee.Reducer.stdDev();
+
+countries = countries.filter(ee.Filter.neq('start_mo', null));
+
+// Loop through countries, export
+var terrasum = countries.map(function( ftr ){
+  
+  // grab start and end of peak fire season
+  var start_month = ftr.get('start_mo');
+  var end_month = ftr.get('end_mo');
+  
+  // filter for the year / peak season
+  var imgmo = ee.ImageCollection.fromImages(
+    
+    years.map(function( y ) {
+    
+      return imgc
+        .filter(ee.Filter.calendarRange(y,y,'year'))
+        .filter(ee.Filter.calendarRange(start_month,end_month,'month'))
+        .mean() // take the mean peak season VPD and VPD anomoly
+        // .min() // take the min
+        // .max() // take the max
+        // .reduce(ee.Reducer.stdDev()) // take the stDev
+        .set('year', y)
+        .set('start_month',start_month)
+        .set('end_month',end_month)
+        .toInt8();
+      })
+    );
+  
+  // stack the image collection as bands
+  var stack = imgmo.toBands();
+  
+  // now calculate statistics
+  // for all (min,max,mean,stdev) take the mean of the country
+  var reduc = stack.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: ftr.geometry(),
+    scale: res,
+    maxPixels: 1e13,
+    tileScale: 16,
+    bestEffort: true
+  });
+  
+  // Submit the output dictionary to a feature
+  var dict_to_ftr = ee.Feature(null, reduc); 
+  var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+  // Return the final merged table
+  return(output_ftr);
+  
+});
+
+// // Add to the map
+// Map.addLayer(
+//   terrasum, {}, "Country TerraClim Peak Season Summary", false);
+
+// Export the table
+Export.table.toDrive({
+  collection: terrasum,
+  description: '_vpd_anomoly',
+  folder: 'global-fire-report',
+  fileFormat: 'CSV'
+});
+
+
+// /**
+// * Now work with annual summaries by country
+// * This can then be compared to the peak season values
+// */
+ 
+// // create the annual ImageCollection
+// var terra_annual_mean = 
+// ee.ImageCollection.fromImages(
+//   years.map(function(y){
+    
+//     // Create a date object
+//     var date = ee.Date.fromYMD(y, 1, 1);
+    
+//     // Slice for just VPD
+//     var slice = imgc
+//       .filter(ee.Filter.calendarRange(y, y, 'year'));
+    
+//     // calculate annual statistics
+//     var mean = slice.reduce(ee.Reducer.mean());
+//     var min = slice.reduce(ee.Reducer.min());
+//     var max = slice.reduce(ee.Reducer.max());
+//     var stdev = slice.reduce(ee.Reducer.stdDev());
+    
+//     // Return the summary bands as a stack
+//     return mean.addBands([min, max, stdev])
+//       .set('year', y)
+//       .set('system:time_start', date);
+      
+// }));
+
+// // check it worked ...
+// Map.addLayer(
+//   terra_annual_mean
+//     .select('vpd_mean')
+//     .filter(ee.Filter.calendarRange(2020,2020,'year'))
+//     .first().clip(countries.filter(ee.Filter.eq('aoi', 'conus_ak'))),
+//   vpdVis_, "2020 Annual Mean VPD (CONUS & AK)", false);
+
+
+
+// // update band names to include year prefix
+// var list = ee.List([]);
+// terra_annual_mean = terra_annual_mean.map( function( image ){
+  
+//   var names = image.bandNames();
+  
+//   var newNames = names.map(function(n){
+//     return list
+//       .add(ee.Number(image.get('year'))
+//       .format('%04d').cat('_').cat(n));
+//   }).flatten();
+  
+//   return image.select(names, newNames);
+// });
+
+
+// // Stack as bands
+// var imgYr = terra_annual_mean.toBands();
+
+// // add the long-term mean and standard deviation as bands
+// imgYr = imgYr.addBands([ltmean, ltstdev])
+
+// print(imgYr.bandNames());
+
+// // now calculate the reduction by country
+// // need to focus on one band at a time
+// var annual_stats = imgYr
+// .reduceRegion({
+//   reducer: ee.Reducer.mean(),
+//   geometry: countries.geometry(),
+//   scale: res,
+//   maxPixels: 1e13,
+//   tileScale: 16
+// });
+
+// // export
+// Export.table.toDrive({
+//   collection: annual_stats,
+//   description: 'TerraClim_VPD_AnnualStats_byCountry',
+//   folder: 'global-fire-report',
+//   fileFormat: 'CSV'
+// });
+
+
+
+
+// var terra_monthly_anom = ee.ImageCollection.fromImages( 
+//   years.map(function (y) { 
+//     return months.map(function (m) { 
+      
+//       // grab some date information
+//       var day = ee.Number(1).toInt(); 
+//       var month = ee.Number(m).toInt(); 
+//       var year = ee.Number(y).toInt(); 
+//       var date = ee.Date.fromYMD(year, month, day);
+//       var my = ee.String(month)
+//         .cat("_").cat(ee.String(year));
+      
+//       // Grab the year/month of data
+//       var slice = imgc
+//           .filter(ee.Filter.calendarRange(y, y, 'year'))
+//           .filter(ee.Filter.calendarRange(m, m, 'month'));
+      
+//       // Calculate statistics
+//       var reduc = slice.reduce(stat);
+      
+//       return reduc
+//         .set('system:time_start', date)
+//         .set('month', m).set('year', y)
+//         .set('system:index', my)
+//   });
+// }).flatten());
+
+
+
+
+// // only grab countries with non-null fire information
+// var countriesSub = countries.filter(ee.Filter.notNull(['pk_sn_strt']));
+
+// var terra_monthly_anom = ee.ImageCollection.fromImages( 
+//   years.map(function (y) { 
+//     return months.map(function (m) { 
+      
+//       // grab some date information
+//       var day = ee.Number(1).toInt(); 
+//       var month = ee.Number(m).toInt(); 
+//       var year = ee.Number(y).toInt(); 
+//       var date = ee.Date.fromYMD(year, month, day);
+//       var my = ee.String(month)
+//         .cat("_").cat(ee.String(year));
+      
+//       // Grab the year/month of data
+//       var slice = imgc
+//           .filter(ee.Filter.calendarRange(y, y, 'year'))
+//           .filter(ee.Filter.calendarRange(m, m, 'month'));
+      
+//       // Calculate statistics
+//       var reduc = slice.reduce(stat);
+      
+//       return reduc
+//         .set('system:time_start', date)
+//         .set('month', m).set('year', y)
+//         .set('system:index', my)
+//   });
+// }).flatten());
+
+// // create the imagecollection month/year
+// var terra_monthly_anom = ee.ImageCollection.fromImages( 
+//   years.map(function (y) { 
+//     return months.map(function (m) { 
+      
+//       // grab some date information
+//       var day = ee.Number(1).toInt(); 
+//       var month = ee.Number(m).toInt(); 
+//       var year = ee.Number(y).toInt(); 
+//       var date = ee.Date.fromYMD(year, month, day);
+//       var my = ee.String(month)
+//         .cat("_").cat(ee.String(year));
+      
+//       // Grab the year/month of data
+//       var slice = imgc
+//           .filter(ee.Filter.calendarRange(y, y, 'year'))
+//           .filter(ee.Filter.calendarRange(m, m, 'month'));
+      
+//       // Calculate statistics
+//       var reduc = slice.reduce(stat);
+      
+//       return reduc
+//         .set('system:time_start', date)
+//         .set('month', m).set('year', y)
+//         .set('system:index', my)
+//   });
+// }).flatten());

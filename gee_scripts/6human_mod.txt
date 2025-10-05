@@ -1,0 +1,406 @@
+/**
+ * 1. Static summaries of GHM and flammable lands
+ * 2. Annual land cover summaries by country
+ * 3. Population density within flammable landscapes
+ * 
+ * Data Sources:
+ * - Global Human Modification (CSP)
+ * 
+ * - Population density (GPWv411, UN-Adjusted)
+ * 
+ * 
+ * Author:  
+ * Maxwell C. Cook, PhD Student
+ * Department of Geography,
+ * University of Colorado Boulder
+ * maxwell.cook@colorado.edu
+ * 
+ */
+
+
+// Load the functions script
+// var functions = require('users/maco/global-fire-report:functions.js');
+
+// // apply a buffer to country polygons
+// var buffer = countries.map(function( ftr ){
+//   return ftr.geometry().buffer(1000);
+// });
+
+// Grab the land cover Type 1
+// Filter to temporal range (2003-2020)
+// Reproject to WGS84, maintain spatial res
+
+// get the projection information
+var proj = mcd12q1.select('LC_Type1').first().projection().getInfo();
+var transform = proj.transform, crs = proj.crs;
+  
+// print("MODIS Projection",proj.crs)
+
+// // visualize
+// Map.addLayer(
+//   mcd12q1.select('LC_Type1').first().randomVisualizer(), 
+//   {}, "MCD12Q1 (2003)", false);
+
+// snag the land cover band
+var lc = mcd12q1
+  .select('LC_Type1')
+  .filter(ee.Filter.calendarRange(2003,2020,'year'))
+  // .map( function (image ){
+  //   return image
+  //     .setDefaultProjection({crs:crs,scale:1000})
+  //     .reduceResolution({
+  //       reducer: ee.Reducer.mode(),
+  //       maxPixels: 65535
+  //     })
+  //     .reproject({
+  //       crs: crs,
+  //       scale: 1000
+  //     })
+  //     .clipToCollection(countries);
+  // });
+
+// // Check on it
+// print(
+//   "Reprojected",lc.first().projection(), 
+//   "Scale",lc.first().projection().nominalScale()
+// );
+
+// // Visualize
+// Map.addLayer(
+//   lc.filter(
+//     ee.Filter.calendarRange(2020,2020,'year')
+//   ).first().randomVisualizer(), 
+//   {}, "MCD12Q1 2020 (Reprojected, Clipped)", false);
+
+
+// create modal flammable lands
+// flammable lands
+var flammable = lc.map(function(image){
+  return image.remap(
+    [11, 13, 15, 16, 17], 
+    [0, 0, 0, 0, 0], 1); //remap, all others 1
+})
+  .reduce(ee.Reducer.mode())
+  .rename('flammable');
+// visualize
+Map.addLayer(
+  flammable, {min:0,max:1}, 
+  "Flammable Lands (2003-2020)", false);
+
+
+/**
+* 1a. Percent area of flammable landscapes
+* 1b. gHM mean score by country
+* 1c. gHM mean score within flammable landscapes
+*/
+
+
+// Visualize the gHM
+ghm = ghm.select('gHM').first().clipToCollection(countries);
+Map.addLayer(ghm, ghmVis, 'Human Modification', false);
+
+
+// Now, multiply flammable lands against the GHM
+var ghm_flammable = 
+  flammable.multiply(ghm).rename('gHM_flammable');
+Map.addLayer(
+  ghm_flammable, {}, "Human Modification w/in Flammable Lands", false);
+
+
+// Stack together
+var stack = ghm.addBands([flammable, ghm_flammable]);
+// print(stack.bandNames());
+
+
+// Loop through countries, export
+var reduc = countries.map(function(ftr){
+  
+  // Calculate the area of burnable land (km2)
+  var areaImage = flammable.multiply(ee.Image.pixelArea());
+  
+  // Sum reducer
+  var area = areaImage.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: ftr.geometry(),
+    scale: 500,
+    maxPixels: 1e13
+  });
+  
+  // convert to km2
+  var flammableAreaSqKm = 
+    ee.Number(area.get('flammable'))
+    .divide(1e6).round();
+  
+  // get the percent area for the country
+  var percent = 
+    flammableAreaSqKm.divide(
+      ftr.geometry().area().divide(1000000)
+    ).multiply(100);
+  
+  area = area.set('percent_flammable', percent);
+  
+  var meanReduc = stack
+    .select(['gHM', 'gHM_flammable'])
+    .reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: ftr.geometry(),
+      scale: 1000,
+      maxPixels: 1e13,
+      tileScale: 16
+    });
+  
+  var stdevReduc = stack
+    .select(['gHM', 'gHM_flammable'])
+    .reduceRegion({
+      reducer: ee.Reducer.stdDev(),
+      geometry: ftr.geometry(),
+      scale: 1000,
+      maxPixels: 1e13,
+      tileScale: 16
+    });
+  
+  var merge = 
+    area.combine(meanReduc).combine(stdevReduc);
+  
+  // Submit the output dictionary to a feature
+  var dict_to_ftr = ee.Feature(null, merge); 
+  var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+  // Return the final merged table
+  return(output_ftr);
+  
+});
+
+// select the bands of interest
+reduc = 
+
+  reduc
+    .select(
+      ['aoi', 'perc_flammable', 'gHM', 'gHM_flammable_mean']
+    );
+
+//Check it worked
+Map.addLayer(
+  reduc, {}, "gHM/Flammable Summary by Country", false);
+
+// Export the table
+Export.table.toDrive({
+  collection: reduc,
+  description: 'human_mod_inFlammable-static',
+  folder: 'global-fire-report',
+  fileFormat: 'GeoJSON'
+});
+
+
+
+
+// /**
+// * 2. 'Time-series' export (2003-2020)
+// * 2a. % flammable, cropland, grassland, forest, urban
+// * 2b. Annual population counts by country (in and out of flammable lands)
+// * 
+// */
+
+// // reclassify annual landcover
+// // return the image pixel area
+// var reclass = lc.map( function (image) {
+  
+//   var year = ee.String(image.get('system:index')).slice(0,4);
+  
+//   // flammable lands
+//   var burnable = image.remap(
+//       [11, 13, 15, 16, 17], 
+//       [0, 0, 0, 0, 0], 1) //remap, all others 1
+//   .rename('flammable');
+//   // now grab pixel area and rename
+//   burnable = burnable
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(burnable.eq(1));
+  
+//   // cropland
+//   var crop = image.eq(12).rename('cropland');
+//   crop = crop
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(crop.eq(1));
+  
+//   // cropland and natural mosaics
+//   var crop_mos = image.remap(
+//     [12,14], [1,1], 0)
+//   .rename('cropland_mosaics');
+//   crop_mos = crop_mos
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(crop_mos.eq(1))
+  
+//   // forestland
+//   var forest = image.remap(
+//     [1,2,3,4,5],[1,1,1,1,1], 0)
+//   .rename('forest');
+//   forest = forest
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(forest.eq(1))
+  
+//   // Forest and savannas
+//   var forest_sav = image.remap(
+//     [1,2,3,4,5,8],[1,1,1,1,1,1], 0)
+//   .rename('forest_savannas')
+//   forest_sav = forest_sav
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(forest_sav.eq(1))
+    
+//   // grassland
+//   var grass = image.eq(10).rename('grassland');
+//   grass = grass
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(grass.eq(1))
+    
+//   // Urban / built-up
+//   var urban = image.eq(13).rename('urban_built');
+//   urban = urban
+//     .multiply(ee.Image.pixelArea()).divide(1e6)
+//     .updateMask(urban.eq(1))
+    
+//   return burnable
+//             .addBands(crop)
+//             .addBands(crop_mos)
+//             .addBands(forest)
+//             .addBands(forest_sav)
+//             .addBands(grass)
+//             .addBands(urban);
+  
+// });
+
+// // Check the band names
+// print(reclass.first().bandNames());
+// Map.addLayer(
+//   reclass.first().select('.*cropland'), {}, "Cropland Area", false)
+
+
+// // // Save the crs information
+// // var proj = reclass.first().projection().getInfo();
+// // print("CRS/Projection: ", proj);
+
+// // var transform = proj.transform, crs = proj.crs;
+// // print(transform);
+
+
+// // loop through countries, calculate area
+// // for now need to do this seperately for each class
+// // perhaps write function to do this all at once
+
+// // annual variable
+// var img = reclass.select('.*cropland').toBands();
+
+// var get_area = function( ftr ){
+  
+//   var area = img.reduceRegion({
+//     reducer: ee.Reducer.sum(),
+//     geometry: ftr.geometry(),
+//     scale: 1000,
+//     crs: crs,
+//     maxPixels: 1e13,
+//     tileScale: 16
+//   });
+  
+//   // Submit the output dictionary to a feature
+//   var dict_to_ftr = ee.Feature(null, area); 
+//   var output_ftr = ee.Feature(ftr.copyProperties(dict_to_ftr));
+  
+//   // Return the final merged table
+//   return(output_ftr);
+  
+// };
+
+// // Map the function
+// var reduc = countries.map(get_area);
+
+// // export
+// Export.table.toDrive({
+//   collection: reduc,
+//   description: 'annual_export_',
+//   folder: 'global-fire-report',
+//   fileFormat: 'CSV'
+// });
+
+
+
+
+// // // cropland mosaics
+
+// // img = reclass.select('.*cropland_mosaic').toBands();
+// // var reduc3 = countries.map(get_area);
+// // // export
+// // Export.table.toDrive({
+// //   collection: reduc3,
+// //   description: 'annual_cropland_mosaics',
+// //   folder: 'global-fire-report',
+// //   fileFormat: 'CSV'
+// // });
+
+// // // forest
+
+// // img = reclass.select('.*forest').toBands();
+// // var reduc4 = countries.map(get_area);
+// // // export
+// // Export.table.toDrive({
+// //   collection: reduc4,
+// //   description: 'annual_forest',
+// //   folder: 'global-fire-report',
+// //   fileFormat: 'CSV'
+// // });
+
+// // // forest / savannas
+
+// // img = reclass.select('.*forest_savannas').toBands();
+// // var reduc5 = countries.map(get_area);
+// // // export
+// // Export.table.toDrive({
+// //   collection: reduc5,
+// //   description: 'annual_forest_savannas',
+// //   folder: 'global-fire-report',
+// //   fileFormat: 'CSV'
+// // });
+
+// // // grassland
+
+// // img = reclass.select('.*grassland').toBands();
+// // var reduc6 = countries.map(get_area);
+// // // export
+// // Export.table.toDrive({
+// //   collection: reduc6,
+// //   description: 'annual_grassland',
+// //   folder: 'global-fire-report',
+// //   fileFormat: 'CSV'
+// // });
+
+// // // urban / built-up
+
+// // img = reclass.select('.*urban_built').toBands();
+// // var reduc7 = countries.map(get_area);
+// // // export
+// // Export.table.toDrive({
+// //   collection: reduc7,
+// //   description: 'annual_urban_built',
+// //   folder: 'global-fire-report',
+// //   fileFormat: 'CSV'
+// // });
+
+// // try a reducer on the full collection
+// var reduc = reclass
+//   .select('flammable')
+//   .toBands()
+//   .reduceRegions({
+//     collection: countries,
+//     reducer: ee.Reducer.sum(),
+//     scale: 500,
+//     crs: proj.crs,
+//     tileScale: 16
+//   });
+
+// // try exporting it
+// // export
+// Export.table.toDrive({
+//   collection: reduc,
+//   description: 'annual_flammable',
+//   folder: 'global-fire-report',
+//   fileFormat: 'CSV'
+// });
