@@ -5,7 +5,7 @@
 
 # Data and Code for: "The properties of individual fire events are essential for understanding global fire regimes"
 
-Code to reproduce the entire analysis is in the R folder. The manuscript is available as a preprint at __(DOI coming soon)__.
+Code to reproduce the entire analysis is in the R folder. The manuscript is available as a preprint at __https://doi.org/10.32942/X2P05Q__.
 
 ![](figures/kg_map_inset.png)
 
